@@ -3,13 +3,13 @@ on:
   workflow_dispatch:
     inputs:
       url:
-        description: 'Target URL'
+        description: '目标网站URL'
         required: true
       name:
-        description: 'App Name (支持中文)'
+        description: '应用名称(支持中文)'
         required: true
-      icon_base64:
-        description: 'Base64编码图标（留空使用默认）'
+      icon_url:
+        description: '图标URL(留空使用默认)'
         required: false
 
 jobs:
@@ -24,23 +24,23 @@ jobs:
           node-version: '18'
 
       - name: Install Pake-cli
-        run: npm install -g pake-cli@4.0.0
+        run: npm install -g pake-cli
 
-      - name: Generate Default Icon
-        if: ${{ !inputs.icon_base64 }}
+      - name: Generate Default Icon URL
+        if: ${{ !inputs.icon_url }}
         run: |
           SVG_CONTENT='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill="#1890ff" d="M50 15c-18.2 0-33 14.8-33 33 0 7.3 2.4 14.1 6.5 19.6L50 85l26.5-17.4c4.1-5.5 6.5-12.3 6.5-19.6 0-18.2-14.8-33-33-33zm0 48c-8.3 0-15-6.7-15-15s6.7-15 15-15 15 6.7 15 15-6.7 15-15 15z"/></svg>'
-          echo "$SVG_CONTENT" > default_whale.svg
-          echo "ICON_BASE=data:image/svg+xml;base64,$(base64 -w0 default_whale.svg)" >> $GITHUB_ENV
+          ENCODED_SVG=$(echo "$SVG_CONTENT" | sed -e 's/"/%22/g' -e 's/</%3C/g' -e 's/>/%3E/g' -e 's/#/%23/g')
+          echo "ICON_URL=data:image/svg+xml,$ENCODED_SVG" >> $GITHUB_ENV
 
       - name: Use Custom Icon
-        if: ${{ inputs.icon_base64 }}
+        if: ${{ inputs.icon_url }}
         run: |
-          echo "ICON_BASE=${{ inputs.icon_base64 }}" >> $GITHUB_ENV
+          echo "ICON_URL=${{ inputs.icon_url }}" >> $GITHUB_ENV
 
       - name: Build Application
         run: |
           pake ${{ inputs.url }} \
             --name "${{ inputs.name }}" \
-            --icon <(echo "${ICON_BASE#*,}" | base64 -d) \
+            --icon "$ICON_URL" \
             --targets windows
