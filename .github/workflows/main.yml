@@ -21,12 +21,22 @@ jobs:
     - name: Install dependencies
       run: npm install -g pake@v4  # 安装 pake@v4 版本
 
+    - name: Generate default icon if none provided
+      id: generate_icon
+      run: |
+        # 检查是否提供了图标 base64 编码，如果没有，则生成一个默认的蓝色鲸鱼图标
+        if [ -z "${{ secrets.ICON_BASE64 }}" ]; then
+          echo "No icon provided. Generating a default blue whale icon..."
+          # 创建一个简单的蓝色鲸鱼图标的 Base64 编码并写入环境变量
+          echo "::set-output name=icon_base64::$(node -e 'const { createCanvas } = require("canvas"); const canvas = createCanvas(128, 128); const ctx = canvas.getContext("2d"); ctx.fillStyle = "#0000ff"; ctx.beginPath(); ctx.arc(64, 64, 60, 0, Math.PI * 2); ctx.fill(); console.log(canvas.toDataURL().split(",")[1]);')"
+        fi
+
     - name: Prepare configuration
       run: |
         echo "{
           \"name\": \"${{ secrets.APP_NAME }}\",
           \"url\": \"${{ secrets.SITE_URL }}\",
-          \"icon\": \"${{ secrets.ICON_BASE64 }}\",
+          \"icon\": \"${{ steps.generate_icon.outputs.icon_base64 || secrets.ICON_BASE64 }}\",
           \"version\": \"1.0.0\",
           \"description\": \"${{ secrets.APP_DESCRIPTION }}\"
         }" > pake-config.json  # 将 GitHub Secrets 中的配置动态写入 JSON 配置文件
@@ -35,7 +45,7 @@ jobs:
       run: pake build --config pake-config.json --output ./output  # 使用 pake 构建 exe 文件
 
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3  # 上传构建好的 .exe 文件
+      uses: actions/upload-artifact@v4  # 使用 v4 版本的 actions/upload-artifact
       with:
         name: pake-exe  # 上传的文件名
         path: ./output/*.exe  # 输出的 exe 文件路径
