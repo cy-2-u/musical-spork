@@ -1,51 +1,46 @@
-name: Build Pake EXE
-
+name: Build Pake App
 on:
-  push:
-    branches:
-      - main  # 每次 main 分支代码更新时触发
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Target URL'
+        required: true
+      name:
+        description: 'App Name (支持中文)'
+        required: true
+      icon_base64:
+        description: 'Base64编码图标（留空使用默认）'
+        required: false
 
 jobs:
   build:
-    runs-on: windows-latest  # 使用 Windows 环境进行构建
-
+    runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3  # 检出仓库代码
+      - uses: actions/checkout@v4
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v3  # 设置 Node.js 环境
-      with:
-        node-version: '16'  # 设置 Node.js 版本，可以根据需要调整
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
 
-    - name: Install dependencies
-      run: npm install -g pake@v4  # 安装 pake@v4 版本
+      - name: Install Pake-cli
+        run: npm install -g pake-cli@4.0.0
 
-    - name: Generate default icon if none provided
-      id: generate_icon
-      run: |
-        # 检查是否提供了图标 base64 编码，如果没有，则生成一个默认的蓝色鲸鱼图标
-        if [ -z "${{ secrets.ICON_BASE64 }}" ]; then
-          echo "No icon provided. Generating a default blue whale icon..."
-          # 创建一个简单的蓝色鲸鱼图标的 Base64 编码并写入环境变量
-          echo "::set-output name=icon_base64::$(node -e 'const { createCanvas } = require("canvas"); const canvas = createCanvas(128, 128); const ctx = canvas.getContext("2d"); ctx.fillStyle = "#0000ff"; ctx.beginPath(); ctx.arc(64, 64, 60, 0, Math.PI * 2); ctx.fill(); console.log(canvas.toDataURL().split(",")[1]);')"
-        fi
+      - name: Generate Default Icon
+        if: ${{ !inputs.icon_base64 }}
+        run: |
+          SVG_CONTENT='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill="#1890ff" d="M50 15c-18.2 0-33 14.8-33 33 0 7.3 2.4 14.1 6.5 19.6L50 85l26.5-17.4c4.1-5.5 6.5-12.3 6.5-19.6 0-18.2-14.8-33-33-33zm0 48c-8.3 0-15-6.7-15-15s6.7-15 15-15 15 6.7 15 15-6.7 15-15 15z"/></svg>'
+          echo "$SVG_CONTENT" > default_whale.svg
+          echo "ICON_BASE=data:image/svg+xml;base64,$(base64 -w0 default_whale.svg)" >> $GITHUB_ENV
 
-    - name: Prepare configuration
-      run: |
-        echo "{
-          \"name\": \"${{ secrets.APP_NAME }}\",
-          \"url\": \"${{ secrets.SITE_URL }}\",
-          \"icon\": \"${{ steps.generate_icon.outputs.icon_base64 || secrets.ICON_BASE64 }}\",
-          \"version\": \"1.0.0\",
-          \"description\": \"${{ secrets.APP_DESCRIPTION }}\"
-        }" > pake-config.json  # 将 GitHub Secrets 中的配置动态写入 JSON 配置文件
+      - name: Use Custom Icon
+        if: ${{ inputs.icon_base64 }}
+        run: |
+          echo "ICON_BASE=${{ inputs.icon_base64 }}" >> $GITHUB_ENV
 
-    - name: Build EXE
-      run: pake build --config pake-config.json --output ./output  # 使用 pake 构建 exe 文件
-
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4  # 使用 v4 版本的 actions/upload-artifact
-      with:
-        name: pake-exe  # 上传的文件名
-        path: ./output/*.exe  # 输出的 exe 文件路径
+      - name: Build Application
+        run: |
+          pake ${{ inputs.url }} \
+            --name "${{ inputs.name }}" \
+            --icon <(echo "${ICON_BASE#*,}" | base64 -d) \
+            --targets windows
