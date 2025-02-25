@@ -30,13 +30,14 @@ jobs:
             --targets windows
 
       - name: Verify Build Output
-        run: ls -R  # 递归显示目录结构
+        run: ls -R  # 递归显示目录结构[5](@ref)[7](@ref)
 
       - name: Upload EXE Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.name }}.exe
-          path: **/${{ inputs.name }}.exe  # 递归搜索所有子目录
+          path: **/${{ inputs.name }}.exe  # 递归搜索所有子目录[5](@ref)[7](@ref)
+          retention-days: 3  # 设置存储保留天数[5](@ref)[7](@ref)
           if-no-files-found: error
 
   release:
