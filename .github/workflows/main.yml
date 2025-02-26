@@ -14,7 +14,7 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest  # 切换到 Windows 环境
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -41,8 +41,15 @@ jobs:
 
       - name: Build Application
         run: |
-          pake ${{ inputs.url }} --name "${{ inputs.name }}" --icon "$env:ICON_URL" --targets windows
-          dir  # 检查文件是否存在
+          pake ${{ inputs.url }} --name "${{ inputs.name }}" --icon "%ICON_URL%" --targets windows
+          if exist "${{ inputs.name }}.exe" (
+            echo "成功生成文件: ${{ inputs.name }}.exe"
+          ) else (
+            echo "错误：未找到文件 ${{ inputs.name }}.exe" >&2
+            exit 1
+          )
+          dir
+        shell: cmd
 
       - name: Upload EXE Artifact
         uses: actions/upload-artifact@v4
