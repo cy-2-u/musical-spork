@@ -1,22 +1,23 @@
-name: PAKE 自动构建
+name: Pake自动化打包
 on:
   workflow_dispatch:
     inputs:
       url:
-        description: '网站URL（必须包含https://前缀）'
+        description: '目标网站URL（需包含https://）'
         required: true
       app_name:
-        description: '应用中文名称（支持直接输入中文）'
+        description: '应用名称（支持中文）'
         required: true
       icon_url:
         description: '自定义图标URL（可选）'
         required: false
 
 jobs:
-  build-executable:
-    runs-on: windows-latest  # 显式指定Windows构建环境
+  build-windows:
+    runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
+    - name: 检出代码
+      uses: actions/checkout@v4
 
     - name: 配置Node环境
       uses: actions/setup-node@v4
@@ -27,28 +28,36 @@ jobs:
     - name: 设置镜像源
       run: npm config set registry https://registry.npmmirror.com
 
-    - name: 安装Pake CLI
+    - name: 安装Pake
       run: npm install pake-cli@latest -g
 
-    - name: 设置图标参数
+    - name: 处理图标参数
       run: |
-        DEFAULT_ICON="https://s3.ax1x.com/2021/03/09/6Id9OO.png"  # 蓝色鲸鱼默认图标
-        ICON_FLAG=$([ -z "${{ inputs.icon_url }}" ] && echo "$DEFAULT_ICON" || echo "${{ inputs.icon_url }}")
-        echo "ICON=$ICON_FLAG" >> $GITHUB_ENV
+        $DEFAULT_ICON = "https://s3.ax1x.com/2021/03/09/6Id9OO.png"
+        if (-not [string]::IsNullOrEmpty('${{ inputs.icon_url }}')) {
+          $ICON = '${{ inputs.icon_url }}'
+        } else {
+          $ICON = $DEFAULT_ICON
+        }
+        echo "ICON=$ICON" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
     - name: 执行打包
       run: |
-        pake "${{ inputs.url }}" \
-          --name "${{ inputs.app_name }}" \
-          --icon "${{ env.ICON }}" \
-          --width 1200 \
+        pake "${{ inputs.url }}" `
+          --name "${{ inputs.app_name }}" `
+          --icon "${{ env:ICON }}" `
+          --width 1200 `
           --height 800
 
-    - name: 自动重命名
-      run: mv "${{ inputs.app_name }}.exe" "${${{ inputs.app_name }}// /_}.exe"  # 处理空格问题
+    - name: 处理文件名空格
+      run: |
+        $originalName = "${{ inputs.app_name }}.exe"
+        $newName = $originalName -replace ' ', '_'
+        Rename-Item -Path $originalName -NewName $newName
 
     - name: 上传制品
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: pake-output
         path: ./${{ inputs.app_name }}*.exe
+        retention-days: 3
