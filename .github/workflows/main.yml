@@ -1,60 +1,50 @@
-name: Build Pake App
+name: CI/CD Pipeline
 on:
-  workflow_dispatch:
-    inputs:
-      url:
-        description: '目标网站URL'
-        required: true
-      name:
-        description: '应用名称(支持中文)'
-        required: true
-      icon_url:
-        description: '图标URL(留空使用默认)'
-        required: false
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
 
-      - name: Install Pake-cli
-        run: npm install -g pake-cli
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Generate Default Icon URL
-        if: ${{ !inputs.icon_url }}
-        run: |
-          SVG_CONTENT='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill="#1890ff" d="M50 15c-18.2 0-33 14.8-33 33 0 7.3 2.4 14.1 6.5 19.6L50 85l26.5-17.4c4.1-5.5 6.5-12.3 6.5-19.6 0-18.2-14.8-33-33-33zm0 48c-8.3 0-15-6.7-15-15s6.7-15 15-15 15 6.7 15 15-6.7 15-15 15z"/></svg>'
-          ENCODED_SVG=$(echo "$SVG_CONTENT" | sed -e 's/"/%22/g' -e 's/</%3C/g' -e 's/>/%3E/g' -e 's/#/%23/g')
-          echo "ICON_URL=data:image/svg+xml,$ENCODED_SVG" >> $GITHUB_ENV
+      - name: Run tests
+        run: npm test
 
-      - name: Use Custom Icon
-        if: ${{ inputs.icon_url }}
-        run: |
-          echo "ICON_URL=${{ inputs.icon_url }}" >> $GITHUB_ENV
+  deploy:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Docker
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build Application
-        run: |
-          pake ${{ inputs.url }} \
-            --name "${{ inputs.name }}" \
-            --icon "$ICON_URL" \
-            --targets windows
-
-      - name: Upload EXE Artifact
-        uses: actions/upload-artifact@v4
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
         with:
-          name: ${{ inputs.name }}.exe
-          path: ${{ inputs.name }}.exe
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Build and push
+        uses: docker/build-push-action@v5
         with:
-          files: ${{ inputs.name }}.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/myapp:latest
