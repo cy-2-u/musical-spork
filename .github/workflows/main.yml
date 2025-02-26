@@ -15,9 +15,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      LANG: en_US.UTF-8   # 确保支持中文文件名
-      LC_ALL: en_US.UTF-8
     steps:
       - uses: actions/checkout@v4
 
@@ -25,69 +22,39 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-
-      - name: Install Wine Dependencies
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install -y wine
 
       - name: Install Pake-cli
         run: npm install -g pake-cli
 
-      - name: Handle Application Icon
-        shell: bash
+      - name: Generate Default Icon URL
+        if: ${{ !inputs.icon_url }}
         run: |
-          # 处理图标逻辑
-          if [ -z "${{ inputs.icon_url }}" ]; then
-            # 生成默认SVG图标
-            SVG_CONTENT='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill="#1890ff" d="M50 15c-18.2 0-33 14.8-33 33 0 7.3 2.4 14.1 6.5 19.6L50 85l26.5-17.4c4.1-5.5 6.5-12.3 6.5-19.6 0-18.2-14.8-33-33-33zm0 48c-8.3 0-15-6.7-15-15s6.7-15 15-15 15 6.7 15 15-6.7 15-15 15z"/></svg>'
-            ENCODED_SVG=$(echo "$SVG_CONTENT" | sed -e 's/"/%22/g' -e 's/</%3C/g' -e 's/>/%3E/g' -e 's/#/%23/g')
-            echo "ICON_URL=data:image/svg+xml,$ENCODED_SVG" >> $GITHUB_ENV
-          else
-            # 使用用户提供的图标
-            echo "ICON_URL=${{ inputs.icon_url }}" >> $GITHUB_ENV
-          fi
+          SVG_CONTENT='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill="#1890ff" d="M50 15c-18.2 0-33 14.8-33 33 0 7.3 2.4 14.1 6.5 19.6L50 85l26.5-17.4c4.1-5.5 6.5-12.3 6.5-19.6 0-18.2-14.8-33-33-33zm0 48c-8.3 0-15-6.7-15-15s6.7-15 15-15 15 6.7 15 15-6.7 15-15 15z"/></svg>'
+          ENCODED_SVG=$(echo "$SVG_CONTENT" | sed -e 's/"/%22/g' -e 's/</%3C/g' -e 's/>/%3E/g' -e 's/#/%23/g')
+          echo "ICON_URL=data:image/svg+xml,$ENCODED_SVG" >> $GITHUB_ENV
+
+      - name: Use Custom Icon
+        if: ${{ inputs.icon_url }}
+        run: |
+          echo "ICON_URL=${{ inputs.icon_url }}" >> $GITHUB_ENV
 
       - name: Build Application
-        shell: bash
         run: |
-          # 清理应用名称（替换空格和特殊字符）
-          CLEAN_NAME=$(echo "${{ inputs.name }}" | tr ' ' '_' | tr -d '[:punct:]')
-          
-          # 执行构建命令
-          pake "${{ inputs.url }}" \
-            --name "$CLEAN_NAME" \
+          pake ${{ inputs.url }} \
+            --name "${{ inputs.name }}" \
             --icon "$ICON_URL" \
-            --targets windows \
-            --output ./build
+            --targets windows
 
-          # 存储清理后的名称供后续步骤使用
-          echo "CLEAN_NAME=$CLEAN_NAME" >> $GITHUB_ENV
-          echo "EXE_PATH=./build/$CLEAN_NAME.exe" >> $GITHUB_ENV
-
-      - name: Verify Build Output
-        run: |
-          ls -la ./build
-          if [ ! -f "$EXE_PATH" ]; then
-            echo "❌ 错误：未找到生成的EXE文件！"
-            exit 1
-          fi
-
-      - name: Upload Artifact
+      - name: Upload EXE Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.name }}_Windows.exe
-          path: ${{ env.EXE_PATH }}
+          name: ${{ inputs.name }}.exe
+          path: ${{ inputs.name }}.exe
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Create Release
         uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: |
-            ${{ env.EXE_PATH }}
-          tag_name: ${{ github.ref }}
-          name: "${{ inputs.name }} v${{ github.ref_name }}"
+          files: ${{ inputs.name }}.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
