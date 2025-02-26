@@ -1,60 +1,45 @@
-name: Build Pake App
+name: Pake Auto Build
 on:
   workflow_dispatch:
     inputs:
       url:
         description: '目标网站URL'
         required: true
-      name:
-        description: '应用名称(支持中文)'
+      app_name:
+        description: '应用名称（支持中文）'
         required: true
       icon_url:
-        description: '图标URL(留空使用默认)'
+        description: '图标URL（可选）'
         required: false
 
 jobs:
-  build:
+  build-exe:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4  # 强制使用v4版本[4](@ref)[5](@ref)
+    
+    - name: 设置Node环境
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: 安装Pake
+      run: npm install pake-cli -g
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
+    - name: 设置默认图标
+      run: |
+        DEFAULT_ICON="https://example.com/blue-whale.png"  # 替换为实际默认图标URL
+        echo "ICON_URL=${ICON_URL:-$DEFAULT_ICON}" >> $GITHUB_ENV
 
-      - name: Install Pake-cli
-        run: npm install -g pake-cli
-
-      - name: Generate Default Icon URL
-        if: ${{ !inputs.icon_url }}
-        run: |
-          SVG_CONTENT='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill="#1890ff" d="M50 15c-18.2 0-33 14.8-33 33 0 7.3 2.4 14.1 6.5 19.6L50 85l26.5-17.4c4.1-5.5 6.5-12.3 6.5-19.6 0-18.2-14.8-33-33-33zm0 48c-8.3 0-15-6.7-15-15s6.7-15 15-15 15 6.7 15 15-6.7 15-15 15z"/></svg>'
-          ENCODED_SVG=$(echo "$SVG_CONTENT" | sed -e 's/"/%22/g' -e 's/</%3C/g' -e 's/>/%3E/g' -e 's/#/%23/g')
-          echo "ICON_URL=data:image/svg+xml,$ENCODED_SVG" >> $GITHUB_ENV
-
-      - name: Use Custom Icon
-        if: ${{ inputs.icon_url }}
-        run: |
-          echo "ICON_URL=${{ inputs.icon_url }}" >> $GITHUB_ENV
-
-      - name: Build Application
-        run: |
-          pake ${{ inputs.url }} \
-            --name "${{ inputs.name }}" \
-            --icon "$ICON_URL" \
-            --targets windows
-
-      - name: Upload EXE Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ inputs.name }}.exe
-          path: ${{ inputs.name }}.exe
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: ${{ inputs.name }}.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: 执行打包
+      run: |
+        pake ${{ inputs.url }} \
+          --name "${{ inputs.app_name }}" \
+          --icon ${{ env.ICON_URL }} \
+          --transparent
+        
+    - name: 上传产物
+      uses: actions/upload-artifact@v4
+      with:
+        name: pake-build
+        path: ./${{ inputs.app_name }}.exe
