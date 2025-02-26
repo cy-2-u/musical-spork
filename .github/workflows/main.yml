@@ -45,7 +45,7 @@ jobs:
       run: |
         pake "${{ inputs.url }}" `
           --name "${{ inputs.app_name }}" `
-          --icon "${{ env:ICON }}" `
+          --icon "${{  env.ICON }}" `
           --width 1200 `
           --height 800
 
